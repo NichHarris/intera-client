@@ -3,8 +3,8 @@ import styles from '../styles/Practice.module.css'
 import { useUser } from '@auth0/nextjs-auth0/client'
 import { useRouter } from 'next/router'
 import auth0 from '../auth/auth0'
-import { Row, Col, Button, ConfigProvider, Typography, Spin } from 'antd'
-import { LineHeightOutlined, LoadingOutlined } from '@ant-design/icons'
+import { Row, Col, Button, ConfigProvider, Typography, Spin, notification } from 'antd'
+import { LoadingOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import { theme } from '../core/theme'
 import AnswerModal from '../components/modals/AnswerModal'
@@ -24,14 +24,16 @@ const PracticeModule = ({ accessToken }) => {
     const [isRetry, setIsRetry] = useState(true)
     const [wordYoutubeUrl, setWordYoutubeUrl] = useState(null)
     const [translationResponse, setTranslationResponse] = useState(null)
+    const [api, contextHolder] = notification.useNotification()
     const [video, setVideo] = useState(null)
 
     const startWebcam = async () => {
-        console.log("Start called")
-
         // Check to see if browser has camera support
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            console.error('Browser does not support current webcam library')
+            api.error({
+                message: 'Browser does not support current webcam library',
+                maxCount: 0,
+            })
         }
 
         // get webcam stream
@@ -40,8 +42,8 @@ const PracticeModule = ({ accessToken }) => {
                 audio: false,
                 video: {
                     width: { ideal: 1280 },
-                    height: { ideal: 720 }
-                }
+                    height: { ideal: 720 },
+                },
             })
             .then((stream) => {
                 stream?.active && setIsVideoEnabled(true)
@@ -102,7 +104,6 @@ const PracticeModule = ({ accessToken }) => {
     }
 
     const stopWebcam = async () => {
-        console.log("Stop called")
         if (videoStream.current && isRecording) {
             videoStream.current.stop()
             // videoReference.current.srcObject = null
@@ -197,38 +198,38 @@ const PracticeModule = ({ accessToken }) => {
                         )}
                     </Col>
                 </Row>
-            
+
                 <Row className={styles.signWordRow}>
                     <Typography className={styles.signWordTypo}>
-                    {isResultView ? (
-                        <div>
-                            Result: 
-                            <span className={styles.signResultText}>
-                                {translationResponse || 'N/A'}
-                            </span>
-                        </div>
-                    ): (
-                        <div>
-                            <span> Sign the word: </span>
-                            {randomWord ? (
-                                <span className={styles.actualSignWord}>
-                                    {formatWord(randomWord)}
+                        {isResultView ? (
+                            <div>
+                                Result:
+                                <span className={styles.signResultText}>
+                                    {translationResponse || 'N/A'}
                                 </span>
-                            ) : (
-                                <span>
-                                    <Spin
-                                        className={styles.spinPadding}
-                                        indicator={
-                                            <LoadingOutlined
-                                                className={styles.loadingOutline}
-                                                spin
-                                            />
-                                        }
-                                    />
-                                </span>
-                            )}
-                        </div>
-                    )}
+                            </div>
+                        ) : (
+                            <div>
+                                <span> Sign the word: </span>
+                                {randomWord ? (
+                                    <span className={styles.actualSignWord}>
+                                        {formatWord(randomWord)}
+                                    </span>
+                                ) : (
+                                    <span>
+                                        <Spin
+                                            className={styles.spinPadding}
+                                            indicator={
+                                                <LoadingOutlined
+                                                    className={styles.loadingOutline}
+                                                    spin
+                                                />
+                                            }
+                                        />
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </Typography>
                 </Row>
 
@@ -237,7 +238,11 @@ const PracticeModule = ({ accessToken }) => {
                         <Button type="primary" className={styles.resultPageButton} onClick={retry}>
                             Retry
                         </Button>
-                        <Button type="primary" className={styles.resultPageButton} onClick={getNewWord}>
+                        <Button
+                            type="primary"
+                            className={styles.resultPageButton}
+                            onClick={getNewWord}
+                        >
                             New Word
                         </Button>
                     </Row>
@@ -287,4 +292,4 @@ export const getServerSideProps = async (context) => {
     return { props: { accessToken } }
 }
 
-export default PracticeModule;
+export default PracticeModule
