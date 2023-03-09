@@ -15,7 +15,7 @@ import ChatboxComponent from '../../components/ChatboxComponent'
 import useTranscriptHistory from '../../hooks/useTranscriptHistory'
 import useRoomInfo from '../../hooks/useRoomInfo'
 import styles from '../../styles/CallPage.module.css'
-import fetcher from '../../core/fetcher'
+import { fetcher } from '../../core/fetcher'
 import socketio from 'socket.io-client'
 import SpeechRecognition, { useSpeechRecognition } from 'react-speech-recognition'
 
@@ -192,7 +192,6 @@ export default function CallPage({ accessToken }) {
     // User input for push to talk
     useEffect(() => {
         const handleKeyPress = (event) => {
-            console.log('spaceCheck', spaceBarPressed, userRole)
             if (event.keyCode === 32 && !spaceBarPressed && userRole === 'STT') {
                 setSpaceBoolCheck(false)
                 SpeechRecognition.startListening({ continuous: true })
@@ -320,12 +319,10 @@ export default function CallPage({ accessToken }) {
 
     // Get the communication type of the user
     const getType = () => {
-        console.log('roomInfo', roomInfo, user, userRole, roomInfo?.users[0] === user?.nickname)
         if (userRole === null) {
             if (roomInfo?.users[0] === user?.nickname) {
                 return roomInfo?.host_type
             } else {
-                console.log('huh?')
                 if (roomInfo?.host_type === 'ASL') {
                     return 'STT'
                 } else {
@@ -464,6 +461,38 @@ export default function CallPage({ accessToken }) {
     /* ----------------------Setup---------------------- */
 
     useEffect(() => {
+        if (user && roomInfo && roomInfo?.users.length == 1) {
+            if (roomInfo?.users[0] !== user?.nickname) {
+                message.info({
+                    content: `Adding ${user?.nickname} to room...`,
+                    key: 'join-room-info',
+                })
+                fetcher(accessToken, '/api/rooms/join_room', {
+                    method: 'PUT',
+                    body: JSON.stringify({ room_id: roomID, user_id: user?.nickname }),
+                })
+                    .then((res) => {
+                        if (res.status != 200) {
+                            message.error({
+                                content: `Error ${res.status}: ${res.error}`,
+                                key: 'join-room-info',
+                            })
+                        } else {
+                            message.info({
+                                content: 'Joined room successfull',
+                                key: 'join-room-info',
+                            })
+                        }
+                    })
+                    .catch((err) => {
+                        message.error({
+                            content: `Error ${err.status}: ${err.error}`,
+                            key: 'join-room-info',
+                        })
+                    })
+            }
+        }
+
         if (roomInfo && user) {
             setUserRole(getType())
             setRemoteNickname(roomInfo?.users?.find((username) => username !== user?.nickname))
@@ -592,7 +621,6 @@ export default function CallPage({ accessToken }) {
     } else if (isLoading) {
         return <LoadingComponent msg="Loading..." />
     } else if (!user && !isLoading) {
-        console.log('||||||||||||||||||||||||||||||', router.asPath)
         router.push('/api/auth/login?state=' + +router.asPath)
     }
 }

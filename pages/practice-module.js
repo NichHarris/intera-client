@@ -8,7 +8,7 @@ import { LoadingOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import { theme } from '../core/theme'
 import AnswerModal from '../components/modals/AnswerModal'
-import fetcher from '../core/fetcher'
+import { fetcher, fetcherNN } from '../core/fetcher'
 
 const PracticeModule = ({ accessToken }) => {
     const [isAnswerModalOpen, setIsAnswerModalOpen] = useState(false)
@@ -34,11 +34,11 @@ const PracticeModule = ({ accessToken }) => {
         setTranslationResponse(data)
     }
 
-    const [translationAccuracy, setTranslationAccuracy] = useState(null)
-    const translationAccuracyState = useRef(translationAccuracy)
-    const setTranslationAccuracyState = (data) => {
-        translationAccuracyState.current = data
-        setTranslationAccuracy(data)
+    const [translationConfidence, setTranslationConfidence] = useState(null)
+    const translationConfidenceState = useRef(translationConfidence)
+    const setTranslationConfidenceState = (data) => {
+        translationConfidenceState.current = data
+        setTranslationConfidence(data)
     }
 
     const [randomWord, setRandomWord] = useState(null)
@@ -55,9 +55,9 @@ const PracticeModule = ({ accessToken }) => {
         form.append('word', randomWordState.current)
 
         // Send video
-        fetcher(
+        fetcherNN(
             accessToken,
-            '/api/practice/submit_answer',
+            '/submit_answer',
             {
                 method: 'POST',
                 body: form,
@@ -66,8 +66,8 @@ const PracticeModule = ({ accessToken }) => {
         )
             .then((res) => {
                 setTranslationResponseState(res.data.result || 'Error')
-                setTranslationAccuracyState(
-                    res.data.accuracy ? Number(res.data.accuracy).toFixed(2) * 100 : null
+                setTranslationConfidenceState(
+                    res.data.confidence ? Number(res.data.confidence).toFixed(2) * 100 : null
                 )
             })
             .then(() => {
@@ -184,7 +184,7 @@ const PracticeModule = ({ accessToken }) => {
             fetcher(accessToken, '/api/practice/get_word', {
                 method: 'GET',
             }).then((response) => {
-                setRandomWordState(response.data.word.toUpperCase())
+                setRandomWordState(response.data.word)
                 setWordYoutubeUrl(response.data.url)
             })
         }
@@ -233,24 +233,38 @@ const PracticeModule = ({ accessToken }) => {
                 <Row className={styles.signWordRow}>
                     <Typography className={styles.signWordTypo}>
                         {isResultView ? (
-                            <div>
-                                Result:
-                                <span
-                                    className={styles.signResultText}
-                                    style={{
-                                        color:
-                                            translationResponseState.current === 'Correct'
-                                                ? '#73d13d'
-                                                : '#ff4d4f',
-                                    }}
-                                >
-                                    {translationResponseState.current || 'N/A'}
-                                </span>
-                                {translationAccuracyState.current && (
-                                    <span className={styles.signResultText}>
-                                        (Accuracy: {translationAccuracyState.current}%)
+                            <div
+                                style={{
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                }}
+                            >
+                                <div style={{ paddingBottom: 5 }}>
+                                    <span> Word Attempted: </span>
+                                    <span className={styles.actualSignWord}>
+                                        {formatWord(randomWord)}
                                     </span>
-                                )}
+                                </div>
+                                <div>
+                                    Result:
+                                    <span
+                                        className={styles.signResultText}
+                                        style={{
+                                            color:
+                                                translationResponseState.current === 'Correct'
+                                                    ? '#73d13d'
+                                                    : '#ff4d4f',
+                                        }}
+                                    >
+                                        {translationResponseState.current || 'N/A'}
+                                    </span>
+                                    {translationConfidenceState.current && (
+                                        <span className={styles.signResultText}>
+                                            (Confidence: {translationConfidenceState.current}%)
+                                        </span>
+                                    )}
+                                </div>
                             </div>
                         ) : (
                             <div>
