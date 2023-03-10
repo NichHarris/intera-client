@@ -8,7 +8,7 @@ import { LoadingOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import { theme } from '../core/theme'
 import AnswerModal from '../components/modals/AnswerModal'
-import { fetcher, fetcherNN } from '../core/fetcher'
+import { fetcher, fetcherNN } from '../core/fetchers'
 
 const PracticeModule = ({ accessToken }) => {
     const [isAnswerModalOpen, setIsAnswerModalOpen] = useState(false)
@@ -55,20 +55,20 @@ const PracticeModule = ({ accessToken }) => {
         form.append('word', randomWordState.current)
 
         // Send video
-        fetcherNN(
-            accessToken,
-            '/submit_answer',
-            {
-                method: 'POST',
-                body: form,
-            },
-            true
-        )
+        fetcherNN(accessToken, '/submit_answer', {
+            method: 'POST',
+            body: form,
+        })
             .then((res) => {
-                setTranslationResponseState(res.data.result || 'Error')
-                setTranslationConfidenceState(
-                    res.data.confidence ? Number(res.data.confidence).toFixed(2) * 100 : null
-                )
+                if (res.error) {
+                    setTranslationResponseState('Error')
+                    setTranslationConfidenceState(null)
+                } else {
+                    setTranslationResponseState(res.data.result || 'Error')
+                    setTranslationConfidenceState(
+                        res.data.confidence ? Number(res.data.confidence).toFixed(2) * 100 : null
+                    )
+                }
             })
             .then(() => {
                 setIsRetry(false)
@@ -77,6 +77,10 @@ const PracticeModule = ({ accessToken }) => {
             })
             .catch((e) => {
                 console.error('Error on retrieving results: ', e)
+                setTranslationResponseState('Error')
+                setTranslationConfidenceState(null)
+                setIsResultLoading(false)
+                setIsResultView(true)
             })
     }
 
@@ -112,14 +116,15 @@ const PracticeModule = ({ accessToken }) => {
                 // set the use ref to the media recorder
                 videoStream.current = mediaRecorderObject
 
-                const blobsArray = []
+                let blobsArray = []
                 // send data to array
                 mediaRecorderObject.ondataavailable = (e) => {
-                    blobsArray.push(e.data)
+                    blobsArray = [e.data]
                 }
 
                 // On stop create blob object, and covert to formdata to send to server
                 mediaRecorderObject.onstop = (e) => {
+                    console.log(blobsArray)
                     sendAnswer(blobsArray)
                 }
 
