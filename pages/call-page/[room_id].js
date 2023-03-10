@@ -385,7 +385,7 @@ export default function CallPage({ accessToken }) {
     /* ----------------------Video---------------------- */
 
     const initializeLocalVideo = async () => {
-        navigator.mediaDevices
+        await navigator.mediaDevices
             .getUserMedia({
                 audio: true,
                 video: {
@@ -394,14 +394,15 @@ export default function CallPage({ accessToken }) {
                 },
             })
             .then((stream) => {
-                userVideo.current.srcObject = stream
+                if (userVideo?.current) userVideo.current.srcObject = stream
                 setIsLocalVideoEnabled(true)
 
                 const mediaRecorderObject = new MediaRecorder(stream, {
                     mimeType: 'video/webm',
                 })
+
                 // set the use ref to the media recorder
-                videoStream.current = mediaRecorderObject
+                if (videoStream?.current) videoStream.current = mediaRecorderObject
 
                 let blobsArray = []
                 // send data to array
@@ -417,7 +418,8 @@ export default function CallPage({ accessToken }) {
                 socket.connect()
             })
             .catch((error) => {
-                console.error('Stream not found:: ', error)
+                console.error('Stream not found: ', error)
+                router.push('/?missing_device')
             })
     }
 
