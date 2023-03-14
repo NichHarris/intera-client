@@ -68,6 +68,23 @@ export default function CallPage({ accessToken }) {
         setIsSendingASL(data)
     }
 
+    window.addEventListener('beforeunload', function (e) {
+        if (roomInfo?.users[0] == user?.nickname) {
+            fetcher(accessToken, '/api/rooms/close_room', {
+                method: 'PUT',
+                body: JSON.stringify({
+                    room_id: roomID,
+                }),
+            }).then((res) => {
+                if (res.status == 200) {
+                    console.log('Room closed')
+                }
+            })
+        }
+
+        return
+    })
+
     const servers = {
         iceServers: [
             {
@@ -336,6 +353,15 @@ export default function CallPage({ accessToken }) {
                 if (res.status == 200) {
                     // Emit mutate message over websocket to other user
                     handleMutate()
+
+                    if (res.data.prediction.startsWith('[')) {
+                        message.info({
+                            key: 'lowConf',
+                            content: `Info: Low confidence in ASL prediction (${parseFloat(
+                                Number(res.data.confidence) * 100
+                            ).toFixed(2)}%)`,
+                        })
+                    }
                 } else {
                     api.error({
                         message: `Error ${res.status}: ${res.error}`,
@@ -420,7 +446,7 @@ export default function CallPage({ accessToken }) {
             })
             .catch((error) => {
                 console.error('Stream not found: ', error)
-                router.push('/?missing_device')
+                router.push('/?missing_device=true')
             })
     }
 
