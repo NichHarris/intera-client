@@ -60,9 +60,27 @@ export default function CallPage({ accessToken }) {
     const [latestTranscript, setLatestTranscript] = useState('')
     const [lastTranscript, setLastTranscript] = useState('')
     const { user, error, isLoading } = useUser()
+    const [loadPage, setLoadPage] = useState(false)
+
+    // stt timer
+    const [sttStart, setSTTStart] = useState(null)
+
+    const { data: transcriptHistory, error: transcriptHistoryError } = useTranscriptHistory(
+        user ? user?.nickname : '',
+        accessToken
+    )
+    const {
+        data: roomInfo,
+        error: roomInfoError,
+        mutate: roomInfoMutate,
+    } = useRoomInfo(roomID || '', accessToken)
+
+    const userRef = useRef(user)
+    const roomInfoRef = useRef(roomInfo)
 
     const [recordingStartTime, setRecordingStartTime] = useState(null)
     const recordingStartTimeState = useRef(recordingStartTime)
+
     const setRecordingStartTimeState = (data) => {
         recordingStartTimeState.current = data
         setRecordingStartTime(data)
@@ -78,7 +96,7 @@ export default function CallPage({ accessToken }) {
 
     if (typeof window != 'undefined' && accessToken) {
         window.addEventListener('beforeunload', function (e) {
-            if (roomInfo?.users[0] == user?.nickname) {
+            if (roomInfo && user && roomInfo?.users[0] === user?.nickname) {
                 fetcher(accessToken, '/api/rooms/close_room', {
                     method: 'PUT',
                     body: JSON.stringify({
@@ -94,6 +112,17 @@ export default function CallPage({ accessToken }) {
             return
         })
     }
+
+    useEffect(() => {
+        if (
+            user &&
+            roomInfo &&
+            roomInfo?.users.find((username) => username === user?.nickname) &&
+            !loadPage
+        ) {
+            setLoadPage(true)
+        }
+    }, [user, roomInfo])
 
     useEffect(() => {
         setIsRoomIdFound(true)
@@ -128,20 +157,6 @@ export default function CallPage({ accessToken }) {
             maxCount: 0,
         })
     }
-
-    // SWR hooks
-    const { data: transcriptHistory, error: transcriptHistoryError } = useTranscriptHistory(
-        user ? user?.nickname : '',
-        accessToken
-    )
-    const {
-        data: roomInfo,
-        error: roomInfoError,
-        mutate: roomInfoMutate,
-    } = useRoomInfo(roomID || '', accessToken)
-
-    const userRef = useRef(user)
-    const roomInfoRef = useRef(roomInfo)
 
     const getVideoPlaceholder = () => {
         return (
@@ -190,10 +205,15 @@ export default function CallPage({ accessToken }) {
         autoConnect: false,
     })
 
-    const handleMutate = () => {
-        socket.emit('mutate', { roomID: roomID })
-        roomInfoMutate()
-    }
+    const socket_message = socketio(`${process.env.API_URL}` || 'http://localhost:5000', {
+        cors: {
+            origin: `${process.env.CLIENT_URL}` || 'http://localhost:3000',
+            credentials: true,
+        },
+        transports: ['websocket'],
+        autoConnect: false,
+        reconnection: true,
+    })
 
     // leave conditions:
     // host leaves -> room closes, forces other user out
@@ -215,7 +235,7 @@ export default function CallPage({ accessToken }) {
         }
 
         // Close the room
-        if (roomInfo?.users[0] == user?.nickname) {
+        if (roomInfo?.users[0] === user?.nickname) {
             fetcher(accessToken, '/api/rooms/close_room', {
                 method: 'PUT',
                 body: JSON.stringify({
@@ -229,7 +249,6 @@ export default function CallPage({ accessToken }) {
         }
 
         // signal other user to reset name, notify user has left, and close video stream/peerConnection
-        // practice ? router.push('/') : router.push('/practice-module')
         router.push('/')
     }
 
@@ -271,6 +290,7 @@ export default function CallPage({ accessToken }) {
                         setSpaceBoolCheck(true)
                     }, 500)
 
+                    setSTTStart(performance.now())
                     message.success({
                         key: 'STT',
                         content: 'Speech recording stopped...',
@@ -328,6 +348,9 @@ export default function CallPage({ accessToken }) {
         }
     }, [spaceCheck, latestTranscript, lastTranscript])
 
+    // timers
+    const [sttTimes, setSTTTimes] = useState([])
+
     // Add a STT message
     const appendSTTMessage = async (message) => {
         fetcher(accessToken, '/api/transcripts/create_message', {
@@ -354,7 +377,26 @@ export default function CallPage({ accessToken }) {
                     message: 'An unknown error has occurred',
                 })
             })
+            .finally(() => {
+                let endTime = performance.now()
+
+                let avgTime = 0
+                let sttList = sttTimes
+                sttList.push(endTime - sttStart)
+
+                sttList.forEach((time) => {
+                    avgTime += time
+                })
+
+                avgTime /= sttList.length
+                setSTTTimes(sttList)
+                console.log('List STT Times: ', sttList)
+                console.log('Average STT Response: ', avgTime) // 3.85 second average with 20 signs
+            })
     }
+
+    // timers
+    const [nnTimes, setNnTimes] = useState([])
 
     // Add an ASL-to-Text message
     const appendASLMessage = async (blobsArray) => {
@@ -362,6 +404,7 @@ export default function CallPage({ accessToken }) {
         const endTime = new Date()
         const elapsedTime = (endTime - recordingStartTimeState.current) / 1000
 
+        let startTime = performance.now()
         // Don't send answer if recording less than 2 seconds
         if (elapsedTime >= 2) {
             setIsSendingASLState(true)
@@ -410,6 +453,22 @@ export default function CallPage({ accessToken }) {
                 .catch((e) => {
                     console.error('Error on retrieving results: ', e)
                     setIsSendingASLState(false)
+                })
+                .finally(() => {
+                    // calculate average time
+                    let endTime = performance.now()
+
+                    let avgTime = 0
+                    let nnList = nnTimes
+                    nnList.push(endTime - startTime)
+                    nnList.forEach((nnTime) => {
+                        avgTime += nnTime
+                    })
+
+                    avgTime /= nnList.length
+                    setNnTimes(nnList)
+                    console.log('List Neural Network Times: ', nnList)
+                    console.log('Average Neural Network Response: ', avgTime) // 3.85 second average with 20 signs
                 })
         } else {
             message.info({
@@ -493,6 +552,7 @@ export default function CallPage({ accessToken }) {
                 }
 
                 socket.connect()
+                socket_message.connect()
             })
             .catch((error) => {
                 console.error('Stream not found: ', error)
@@ -573,14 +633,25 @@ export default function CallPage({ accessToken }) {
 
     const handleDataTransfer = (data) => {
         if (data.type === 'offer') {
-            setRemoteNickname(roomInfo?.users?.find((username) => username !== user?.nickname))
-            initializePeerConnection()
-            peerConnection.setRemoteDescription(new RTCSessionDescription(data))
-            sendAnswer()
+            try {
+                initializePeerConnection()
+                peerConnection.setRemoteDescription(new RTCSessionDescription(data))
+                sendAnswer()
+            } catch (error) {
+                console.error('Unable to handle offer: ', error)
+            }
         } else if (data.type === 'answer') {
-            peerConnection?.setRemoteDescription(new RTCSessionDescription(data))
+            try {
+                peerConnection?.setRemoteDescription(new RTCSessionDescription(data))
+            } catch (error) {
+                console.error('Unable to handle answer: ', error)
+            }
         } else if (data.type === 'candidate') {
-            peerConnection?.addIceCandidate(new RTCIceCandidate(data.candidate))
+            try {
+                peerConnection?.addIceCandidate(new RTCIceCandidate(data.candidate))
+            } catch (error) {
+                console.error('Unable to handle candidate: ', error)
+            }
         } else {
             console.log('Unrecognized data received...')
         }
@@ -611,12 +682,20 @@ export default function CallPage({ accessToken }) {
     socket.on('connect', (data) => {
         if (!data) {
             socket.emit('join', { user: user?.nickname, room_id: roomID })
+            socket.emit('mutate', { room_id: roomID })
+        }
+    })
+
+    socket_message.on('connect', (data) => {
+        if (!data) {
+            socket_message.emit('message', { user: user?.nickname, room_id: roomID })
+            // socket_message.emit('mutate', { room_id: roomID })
         }
     })
 
     // Following a succesful join, establish a peer connection
     // and send an offer to the other user
-    socket.on('mutate', (data) => {
+    socket_message.on('mutate', (data) => {
         roomInfoMutate()
     })
 
@@ -624,10 +703,6 @@ export default function CallPage({ accessToken }) {
     // and send an offer to the other user
     socket.on('ready', (data) => {
         roomInfoMutate()
-    })
-
-    socket.on('stream_buffer_response', (data) => {
-        // console.log('RECEIVED STREAM BUFFER DATA', data)
     })
 
     socket.on('disconnect', (data) => {
@@ -640,6 +715,11 @@ export default function CallPage({ accessToken }) {
             handleLeave()
         }
     })
+
+    const handleMutate = () => {
+        socket_message.emit('mutate', { room_id: roomID })
+        roomInfoMutate()
+    }
 
     /* ----------------------Setup---------------------- */
 
@@ -665,6 +745,7 @@ export default function CallPage({ accessToken }) {
                                 content: 'Joined room successfull',
                                 key: 'join-room-info',
                             })
+                            roomInfoMutate()
                         }
                     })
                     .catch((err) => {
@@ -706,17 +787,18 @@ export default function CallPage({ accessToken }) {
         }
     }, [roomInfo, user, transcriptHistoryError, roomInfoError])
 
+    // only want to start video init once all the page items have loaded -> user, roomInfo, roomId etc)
     useEffect(() => {
-        if (user && !isLoading && roomID) {
+        if (user && !isLoading && roomID && loadPage) {
             initializeLocalVideo()
 
             return function cleanup() {
                 peerConnection?.close()
             }
         }
-    }, [isLoading, user, roomID])
+    }, [isLoading, user, roomID, loadPage])
 
-    if (user && !isLoading && isRoomIdFound) {
+    if (user && !isLoading && isRoomIdFound && loadPage) {
         return (
             <ConfigProvider theme={theme}>
                 <HeaderComponent user={user} roomID={roomID} handleLeave={handleLeave} />
