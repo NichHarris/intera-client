@@ -53,7 +53,16 @@ const Header = ({ user, roomID, handleLeave }) => {
                 ) : (
                     <div className={styles.headerLanding} style={{ marginRight: '5vw' }}>
                         <span className={styles.headerTitle}>Intera</span>
-                        <Image className={styles.headerLogo} src={logo} height={35} width={35} />
+                        <Image
+                            className={styles.headerLogo}
+                            src={logo}
+                            height={35}
+                            width={35}
+                            style={{
+                                maxWidth: '100%',
+                                height: 'auto',
+                            }}
+                        />
                     </div>
                 )}
             </Col>

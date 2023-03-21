@@ -212,8 +212,7 @@ export default function CallPage({ accessToken }) {
             credentials: true,
         },
         transports: ['websocket'],
-        autoConnect: false,
-        reconnection: true,
+        // autoConnect: false,
     })
 
     // leave conditions:
@@ -250,6 +249,8 @@ export default function CallPage({ accessToken }) {
         }
 
         // signal other user to reset name, notify user has left, and close video stream/peerConnection
+        socket.close()
+        socket_message.close()
         router.push('/')
     }
 
@@ -636,14 +637,17 @@ export default function CallPage({ accessToken }) {
         if (data.type === 'offer') {
             try {
                 initializePeerConnection()
-                peerConnection.setRemoteDescription(new RTCSessionDescription(data))
+
+                peerConnection?.setRemoteDescription(new RTCSessionDescription(data))
                 sendAnswer()
             } catch (error) {
                 console.error('Unable to handle offer: ', error)
             }
         } else if (data.type === 'answer') {
             try {
-                peerConnection?.setRemoteDescription(new RTCSessionDescription(data))
+                if (peerConnection && peerConnection?.signalingState !== 'stable') {
+                    peerConnection?.setRemoteDescription(new RTCSessionDescription(data))
+                }
             } catch (error) {
                 console.error('Unable to handle answer: ', error)
             }
@@ -689,15 +693,21 @@ export default function CallPage({ accessToken }) {
 
     socket_message.on('connect', (data) => {
         if (!data) {
-            socket_message.emit('message', { user: user?.nickname, room_id: roomID })
-            // socket_message.emit('mutate', { room_id: roomID })
+            console.log('msg connected')
+            socket_message.emit('join_msg', { user: user?.nickname, room_id: roomID })
         }
     })
 
     // Following a succesful join, establish a peer connection
     // and send an offer to the other user
     socket_message.on('mutate', (data) => {
+        console.log('mutate received', data)
         roomInfoMutate()
+    })
+
+    socket_message.on('pong', (data) => {
+        console.log('pong', data)
+        // roomInfoMutate()
     })
 
     // Following a succesful join, establish a peer connection
@@ -707,6 +717,7 @@ export default function CallPage({ accessToken }) {
     })
 
     socket.on('disconnect', (data) => {
+        console.log('disconnected', data)
         setRemoteNickname(null)
         setIsRemoteVideoEnabled(false)
     })
@@ -718,9 +729,14 @@ export default function CallPage({ accessToken }) {
     })
 
     const handleMutate = () => {
+        console.log('handle mutate')
         socket_message.emit('mutate', { room_id: roomID })
         roomInfoMutate()
     }
+
+    // setInterval(() => {
+    //     socket_message.emit('mutate', { room_id: roomID, user: user?.nickname })
+    // }, 5000)
 
     /* ----------------------Setup---------------------- */
 
